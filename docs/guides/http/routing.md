@@ -1,18 +1,18 @@
-# Routes and URL design
+# Routing
 
 The point of a web framework is to make it easy to work with HTTP requests, which means managing routes and designing URLs. This guide shows you how to do this in Bocadillo.
 
 ## Overview
 
-In Bocadillo, **routes** map an URL pattern to a view function, class or method. When Bocadillo receives a request, the application router invokes the view of the matching route and returns a response.
+In Bocadillo, **routes** map an URL pattern to a view function, class or method. When an application receives a request, its router invokes the view for the matching route and returns a response.
 
 ## How are requests processed?
 
 When an inbound HTTP requests hits your Bocadillo application, the following algorithm is used to determine which view gets executed:
 
-1. Bocadillo runs through each URL pattern and stops at the first matching one, extracting the route parameters as well. If none can be found or any of the route parameters fails validation, an `HTTPError(404)` exception is raised.
+1. Bocadillo runs through each URL pattern and stops at the first matching one, extracting the route parameters as well. If none can be found, an `HTTPError(404)` is raised.
 2. Bocadillo checks that the matching route supports the requested HTTP method and raises an `HTTPError(405)` exception if it does not.
-3. When this is done, Bocadillo calls the view attached to the route.
+3. When this is done, Bocadillo calls the view attached to the route. If any of the route parameters fails validation, an `HTTPError(400)` exception is raised.
 4. If no pattern matches, or if an exception is raised in the process, Bocadillo invokes an appropriate error handler (see [Route error handling](#route-error-handling) below).
 
 ## Examples
@@ -28,27 +28,26 @@ app = App()
 async def index(req, res):
     pass
 
-@app.route('/listings/143/')
+@app.route('/listings/143')
 async def get_listing_143(req, res):
     pass
 
-@app.route('/listings/{id:d}/')
+@app.route('/listings/{id}')
 async def get_listing(req, res, id: int):
     pass
 ```
 
 Note that:
 
-- An URL pattern _should_ start with a leading slash. If it doesn't, Bocadillo adds one for you (except for the catch-all pattern `{}`).
+- An URL pattern should start with a leading slash.
 - Bocadillo honors the presence or absence of a trailing slash on the URL. It will not perform any redirection by default.
-- Route parameters are defined using the F-string notation.
-- Route parameters can optionally use format specifiers to perform validation and conversion. For instance, in `get_listing()`, `{id:d}` validates that `id` is an integer. By default, route parameters are extracted as strings.
+- Route parameters are defined using the `{param_name}` notation and passed as keyword arguments to the view.
 
 Here's how a few example requests would be handled:
 
 - A request to `/` would match the `index()` view.
-- `/listings/143` would not match `get_listing_143()` because the latter's URL pattern includes a trailing slash.
-- `/listings/foo/` would not match `get_listing()` because the latter's URL pattern requires that `id` be an integer.
+- `/listings/143/` would not match `get_listing_143()` because the latter's URL pattern does not include a trailing slash.
+- `/listings/foo` would not match `get_listing()` because its URL pattern requires `id` to be an integer.
 
 ## What the router searches against
 
@@ -56,13 +55,15 @@ The router searches against the requested _URL path_ — which does not include 
 
 ## Route parameters
 
-Route parameters allows a single URL pattern to match a variety of URLs. Their syntax is inspired by F-strings and is powered by [parse](https://pypi.org/project/parse/).
+Route parameters allow a single URL pattern to match a variety of URLs. Their syntax is inspired by format strings and their validation is powered by [TypeSystem].
+
+[typesystem]: https://www.encode.io/typesystem/
 
 ### Basic usage
 
-A route parameter is defined with the `{param_name}` syntax. When a request is made to a matching URL, the parameter value is extracted and made available to the view.
+A route parameter is defined with the `{param_name}` syntax. When a request is made to a matching URL, the parameter value is extracted and passed to the view as a keyword argument.
 
-For example, consider the following route pattern:
+Consider the following route pattern:
 
 ```python
 "/say/{message}"
@@ -70,31 +71,47 @@ For example, consider the following route pattern:
 
 If a request is made to `/say/hello`, the view will be given a keyword argument `message` with the value `"hello"`.
 
-You can learn more about the format syntax in the `parse` documentation: [Format Syntax](https://github.com/r1chardj0n3s/parse#format-syntax).
-
 ### Validation and conversion
 
-Lightweight validation and conversion of route parameters can be achieved by decorating them with **format specifiers**.
+If the route parameter is declared on the view with a [type annotation](https://docs.python.org/3/library/typing.html), Bocadillo automatically converts the parameter value to that type. If conversion fails, a `400 Bad Request` response is returned with appropriate error messages.
 
-This allows you to make sure the provided parameters comply with a certain format. When they don't, matching is considered to have failed.
+This provides a lightweight validation and conversion system for route parameters.
 
-The basic syntax is `{param_name:specifier}`. Common format specifiers include `d` for integers and `w` for alphanumerical characters.
-
-A typical use case is using the `d` specifier to require that an `id` is an integer:
+Consider the following example:
 
 ```python
 from bocadillo import App
 
 app = App()
 
-@app.route("/items/{id:d}")
+@app.route("/items/{id}")
 async def get_item(req, res, id: int):
     pass
 ```
 
-As you can tell from the type annotation, the `id` will be given as an integer to the view instead of a string thanks to the integer specifier `d`.
+By annotating `id` as an `int`, Bocadillo _automatically_ converts the extracted `id` parameter to an integer before passing it the view. It's that simple!
 
-You can find the full list of supported specifiers in the parse documentation: [Format Specification](https://github.com/r1chardj0n3s/parse#format-specification).
+Behind the scenes, route parameter conversion is powered by [TypeSystem]. This means that parameters can be annotated with a TypeSystem field:
+
+```python
+from typesystem import Integer
+
+@app.route("/items/{quantity}")
+async def get_item(req, res, quantity: Integer(minimum=0)):
+    pass
+```
+
+See [TypeSystem fields](https://www.encode.io/typesystem/fields/) for the complete list of available fields and options.
+
+For convenience and optimal editor support, we provide the following aliases:
+
+- `int -> typesystem.Integer()`
+- `float -> typesystem.Float()`
+- `bool -> typesystem.Boolean()`
+- `datetime.datetime -> typesystem.DateTime()`
+- `datetime.date -> typesystem.Date()`
+- `datetime.time -> typesystem.Time()`
+- `decimal.Decimal -> typesystem.Decimal()`
 
 ### Wildcard matching
 
@@ -102,7 +119,7 @@ Wildcard URL matching is made possible thanks the anonymous parameter `{}`.
 
 This is useful to implement routes that serve as defaults when no other route matches the requested URL.
 
-For example, the following snippet shows how to implement a "catch-all" route.
+The following snippet shows how to implement a "catch-all" route.
 
 ```python
 from bocadillo import App
@@ -116,12 +133,13 @@ async def hello(req, res):
 
 As you can see, the value of an anonymous parameter is not passed to the view. If you need access to the value, you should use a regular named route parameter.
 
-::: warning CAUTION
+::: warning CAVEATS
 
 - **Order matters**. If `/foo/{}` is defined before `/foo/bar`, making a request to `/foo/bar` will match the former.
 - The anonymous parameter `{}` expects a **non-empty string**. This means that, unlike the catch-all `{}`, the pattern `/{}` will _not_ match the root URL `/` because it expects a non-empty value after the leading slash.
-- Wildcard routes should not be used to implement 404 pages — see the next section for how Bocadillo deals with URLs that don't match any route.
-  :::
+- Wildcard routes should not be used to implement 404 pages — read on to know how Bocadillo deals with URLs that don't match any route.
+
+:::
 
 ## Route error handling
 
