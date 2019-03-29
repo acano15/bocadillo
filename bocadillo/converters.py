@@ -36,17 +36,29 @@ def convert_arguments(func: Callable) -> Callable:
 
         for key, value in bound.arguments.items():
             try:
-                field: typesystem.Field = FIELD_ALIASES[annotations[key]]
+                annotation = annotations[key]
             except KeyError:
-                pass
+                continue
+
+            field: typesystem.Field
+            if isinstance(annotation, typesystem.Field):
+                field = annotation
             else:
-                validator = typesystem.Object(properties=field)
-                try:
-                    validated = validator.validate({key: value})
-                except typesystem.ValidationError as exc:
-                    errors.extend(exc.messages())
-                else:
-                    bound.arguments[key] = validated[key]
+                field = FIELD_ALIASES.get(annotation)
+                if field is None:
+                    continue
+
+            # NOTE: don't use `field.validate()` directly. Use an `Object`
+            # so that error messages contain the name of the field
+            # as passed to `.validate()` below.
+            validator = typesystem.Object(properties=field)
+
+            try:
+                validated = validator.validate({key: value})
+            except typesystem.ValidationError as exc:
+                errors.extend(exc.messages())
+            else:
+                bound.arguments[key] = validated[key]
 
         if errors:
             raise typesystem.ValidationError(messages=errors)

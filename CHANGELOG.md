@@ -16,8 +16,10 @@ As a result, we strongly recommend you read this document carefully before upgra
 
 ### Added
 
-- Route parameters are now converted based on type annotations defined on the HTTP or WebSocket view.
+- Route parameters are now converted based on type annotations defined on the HTTP or WebSocket view. Annotations can be `int`, `float`, `bool`, `date`, `datetime`, `time`, `decimal.Decimal` or any [TypeSystem] field.
 - Error handlers can now re-raise exceptions for further processing, e.g. re-raise an `HTTPError` which will be processed by the registered `HTTPError` handler.
+
+[typesystem]: https://www.encode.io/typesystem
 
 ### Removed
 

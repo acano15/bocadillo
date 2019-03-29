@@ -1,8 +1,9 @@
 from typing import Type, Any
 
 import pytest
+import typesystem
 
-from bocadillo import HTTPError, WebSocketDisconnect
+from bocadillo import HTTPError
 from bocadillo.testing import create_client
 from bocadillo.error_handlers import error_to_media
 
@@ -112,3 +113,23 @@ def test_if_invalid_route_parameter_then_error_response(
     r = check_status(client, f"/{string_value}")
     if r is not None:
         assert "value" in r.json()["detail"]
+
+
+def test_typesystem_converter(app, client):
+    @app.route("/{number}")
+    async def show(req, res, number: typesystem.Integer(minimum=0)):
+        res.media = {"number": number}
+
+    r = client.get("/12")
+    assert r.json() == {"number": 12}
+    r = client.get("/-12")
+    assert r.status_code == 400
+
+
+def test_defaults_to_str(app, client):
+    @app.route("/{number}")
+    async def show(req, res, number: "unknown_annotation"):
+        res.media = {"number": number}
+
+    r = client.get("/12")
+    assert r.json() == {"number": "12"}
