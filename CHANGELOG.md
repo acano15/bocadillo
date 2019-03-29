@@ -21,6 +21,10 @@ As a result, we strongly recommend you read this document carefully before upgra
 
 [typesystem]: https://www.encode.io/typesystem
 
+### Deprecated
+
+- Specifiers in route parameters (in the style of [parse](https://pypi.org/project/parse/), e.g. `{id:d}`) are still supported but have been deprecated in favor of the new type annotation-based conversion. They won't work anymore in 0.15.
+
 ### Removed
 
 Deprecated items from 0.13:
