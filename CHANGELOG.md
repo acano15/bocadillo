@@ -14,6 +14,11 @@ As a result, we strongly recommend you read this document carefully before upgra
 
 ## [Unreleased]
 
+### Added
+
+- Route parameters are now converted based on type annotations defined on the HTTP or WebSocket view.
+- Error handlers can now re-raise exceptions for further processing, e.g. re-raise an `HTTPError` which will be processed by the registered `HTTPError` handler.
+
 ### Removed
 
 Deprecated items from 0.13:
