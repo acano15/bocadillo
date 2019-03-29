@@ -158,6 +158,12 @@
             ],
             "version": "==0.11.4"
         },
+        "typesystem": {
+            "hashes": [
+                "sha256:608cb3b70116e6930ee89f779598a9e51d381b672e0f5e0cc6caf5d1300157bc"
+            ],
+            "version": "==0.2.1"
+        },
         "urllib3": {
             "hashes": [
                 "sha256:61bf29cada3fc2fbefad4fdf059ea4bd1b4a86d2b6d15e1c7c0b582b9752fe39",

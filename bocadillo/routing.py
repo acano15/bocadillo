@@ -21,12 +21,14 @@ from typing import (
     TypeVar,
 )
 
+import typesystem
 from parse import Parser
 from starlette.websockets import WebSocketClose
 
 from . import views
 from .app_types import HTTPApp, Receive, Scope, Send
 from .compat import asyncnullcontext
+from .converters import convert_arguments
 from .errors import HTTPError
 from .injection import consumer
 from .redirection import Redirection
@@ -329,7 +331,11 @@ class WebSocketRoute(BaseRoute[WebSocketView]):
         context = ws if ws.auto_accept else asyncnullcontext()
         try:
             async with context:
-                await self.view(ws, **params)  # type: ignore
+                try:
+                    await self.view(ws, **params)  # type: ignore
+                except typesystem.ValidationError:
+                    await ws.ensure_closed(403)
+                    traceback.print_exc()
         except BaseException:
             traceback.print_exc()  # useful for client-side debugging
             await ws.ensure_closed(1011)
@@ -347,8 +353,9 @@ class WebSocketRouter(BaseRouter[WebSocketRoute, WebSocketView]):
 
     def normalize(self, view: WebSocketView) -> WebSocketView:
         view = super().normalize(view)
-        # Resolve providers in the websocket view.
-        return consumer(view)
+        view = convert_arguments(view)
+        view = consumer(view)
+        return view
 
     def add_route(
         self, view: WebSocketView, pattern: str, **kwargs
