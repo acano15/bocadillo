@@ -8,6 +8,7 @@
 [generic types]: https://docs.python.org/3/library/typing.html#generics
 """
 
+import sys
 import inspect
 import traceback
 from typing import (
@@ -335,7 +336,9 @@ class WebSocketRoute(BaseRoute[WebSocketView]):
                     await self.view(ws, **params)  # type: ignore
                 except typesystem.ValidationError:
                     await ws.ensure_closed(403)
-                    traceback.print_exc()
+                    # See: https://github.com/encode/typesystem/issues/64
+                    if sys.version_info >= (3, 7):
+                        traceback.print_exc()
         except BaseException:
             traceback.print_exc()  # useful for client-side debugging
             await ws.ensure_closed(1011)
