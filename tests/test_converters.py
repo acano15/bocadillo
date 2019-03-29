@@ -109,4 +109,6 @@ def test_if_invalid_route_parameter_then_error_response(
     setup_error_handler(app)
     setup(app, annotation)
     client = create_client(app, raise_server_exceptions=False)
-    check_status(client, f"/{string_value}")
+    r = check_status(client, f"/{string_value}")
+    if r is not None:
+        assert "value" in r.json()["detail"]

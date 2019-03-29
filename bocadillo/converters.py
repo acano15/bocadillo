@@ -36,16 +36,17 @@ def convert_arguments(func: Callable) -> Callable:
 
         for key, value in bound.arguments.items():
             try:
-                field = FIELD_ALIASES[annotations[key]]
+                field: typesystem.Field = FIELD_ALIASES[annotations[key]]
             except KeyError:
                 pass
             else:
+                validator = typesystem.Object(properties=field)
                 try:
-                    value = field.validate(value)
+                    validated = validator.validate({key: value})
                 except typesystem.ValidationError as exc:
                     errors.extend(exc.messages())
                 else:
-                    bound.arguments[key] = value
+                    bound.arguments[key] = validated[key]
 
         if errors:
             raise typesystem.ValidationError(messages=errors)
