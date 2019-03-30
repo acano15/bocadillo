@@ -16,14 +16,15 @@ As a result, we strongly recommend you read this document carefully before upgra
 
 ### Added
 
-- Route parameters are now converted based on type annotations defined on the HTTP or WebSocket view. Annotations can be `int`, `float`, `bool`, `date`, `datetime`, `time`, `decimal.Decimal` or any [TypeSystem] field.
+- Route parameters are now validated based on type annotations defined on the HTTP or WebSocket view. Annotations can be `int`, `float`, `bool`, `date`, `datetime`, `time`, `decimal.Decimal` or any [TypeSystem] field.
+- Query parameters can be injected into a view by declaring them as parameters with defaults, e.g. `limit: int = None`. Type annotation-based validation is also available.
 - Error handlers can now re-raise exceptions for further processing, e.g. re-raise an `HTTPError` which will be processed by the registered `HTTPError` handler.
 
 [typesystem]: https://www.encode.io/typesystem
 
 ### Deprecated
 
-- Specifiers in route parameters (in the style of [parse](https://pypi.org/project/parse/), e.g. `{id:d}`) are still supported but have been deprecated in favor of the new type annotation-based conversion. They won't work anymore in 0.15.
+- Specifiers in route parameters (e.g. `{id:d}`) are still supported but are now deprecated in favor of type annotation-based validation. They won't work anymore in 0.15.
 
 ### Removed
 
