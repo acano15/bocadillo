@@ -73,25 +73,47 @@ If a request is made to `/say/hello`, the view will be given a keyword argument 
 
 ### Validation and conversion
 
-If the route parameter is declared on the view with a [type annotation](https://docs.python.org/3/library/typing.html), Bocadillo automatically converts the parameter value to that type. If conversion fails, a `400 Bad Request` response is returned with appropriate error messages.
+Bocadillo provides a lightweight route parameter validation mechanism based on [type annotations](https://docs.python.org/3/library/typing.html).
 
-This provides a lightweight validation and conversion system for route parameters.
+#### Basic usage
+
+If the route parameter is declared on the view with a type annotation, Bocadillo automatically converts the parameter value to that type.
 
 Consider the following example:
 
 ```python
-from bocadillo import App
-
-app = App()
-
 @app.route("/items/{id}")
 async def get_item(req, res, id: int):
     pass
 ```
 
-By annotating `id` as an `int`, Bocadillo _automatically_ converts the extracted `id` parameter to an integer before passing it the view. It's that simple!
+By annotating `id` as an `int`, Bocadillo _automatically_ converts the extracted `id` parameter to an integer before passing it to the view. It's that simple!
 
-Behind the scenes, route parameter conversion is powered by [TypeSystem]. This means that parameters can be annotated with a TypeSystem field:
+#### When validation fails
+
+If a parameter cannot be converted, a `400 Bad Request` response is returned with explicit error messages.
+
+See what happens to the example above if we pass a non-integer `id`:
+
+```bash
+curl http://localhost:8000/items/test
+```
+
+```json
+{
+  "error": "400 Bad Request",
+  "status": 400,
+  "detail": {
+    "id": "Must be a number."
+  }
+}
+```
+
+Very helpful for debugging! 🐛
+
+#### TypeSystem fields
+
+Behind the scenes, validation is powered by [TypeSystem]. This means that parameters can be annotated with any TypeSystem field:
 
 ```python
 from typesystem import Integer
@@ -101,17 +123,21 @@ async def get_item(req, res, quantity: Integer(minimum=0)):
     pass
 ```
 
-See [TypeSystem fields](https://www.encode.io/typesystem/fields/) for the complete list of available fields and options.
+See [TypeSystem fields](https://www.encode.io/typesystem/fields/) for the complete list of fields and their options.
 
-For convenience and optimal editor support, we provide the following aliases:
+#### Aliases
 
-- `int -> typesystem.Integer()`
-- `float -> typesystem.Float()`
-- `bool -> typesystem.Boolean()`
-- `datetime.datetime -> typesystem.DateTime()`
-- `datetime.date -> typesystem.Date()`
-- `datetime.time -> typesystem.Time()`
-- `decimal.Decimal -> typesystem.Decimal()`
+Annotating parameters with builtins like `int` or `bool` works thanks to the following aliases:
+
+| Type annotation     | TypeSystem field |
+| ------------------- | ---------------- |
+| `int`               | `Integer`        |
+| `float`             | `Float`          |
+| `bool`              | `Boolean`        |
+| `decimal.Decimal`   | `Decimal`        |
+| `datetime.datetime` | `DateTime`       |
+| `datetime.date`     | `Date`           |
+| `datetime.time`     | `Time`           |
 
 ### Wildcard matching
 
