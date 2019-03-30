@@ -31,7 +31,7 @@ setuptools.setup(
         "parse",
         "python-multipart",
         "websockets>=6.0",
-        "aiodine>=1.2.4, <2.0",
+        "aiodine>=1.2.5, <2.0",
     ],
     extras_require={"files": ["aiofiles"], "sessions": ["itsdangerous"]},
     python_requires=">=3.6",
