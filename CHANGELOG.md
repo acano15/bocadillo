@@ -22,11 +22,9 @@ As a result, we strongly recommend you read this document carefully before upgra
 
 [typesystem]: https://www.encode.io/typesystem
 
-### Deprecated
-
-- Specifiers in route parameters (e.g. `{id:d}`) are still supported but are now deprecated in favor of type annotation-based validation. They won't work anymore in 0.15.
-
 ### Removed
+
+- **BREAKING**: route parameter validation via specifiers (e.g. `{id:d}`) is not supported anymore. Please use type annotation-based validation instead (e.g. `pk: int`).
 
 Deprecated items from 0.13:
 

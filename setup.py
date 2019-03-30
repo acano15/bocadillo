@@ -28,7 +28,6 @@ setuptools.setup(
         "jinja2>=2.10",
         "whitenoise",
         "requests",
-        "parse",
         "python-multipart",
         "websockets>=6.0",
         "aiodine>=1.2.5, <2.0",

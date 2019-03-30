@@ -20,23 +20,22 @@ from typing import (
     TypeVar,
 )
 
-from parse import Parser
 from starlette.websockets import WebSocketClose
 
 from . import views
 from .app_types import HTTPApp, Receive, Scope, Send
 from .errors import HTTPError
 from .redirection import Redirection
+from .urlparse import Parser
 from .request import Request
 from .response import Response
 from .views import AsyncHandler, HandlerDoesNotExist, View
 from .websockets import WebSocket, WebSocketView
 
-WILDCARD = "{}"
-
 # Route generic types.
 _R = TypeVar("_R", bound="BaseRoute")  # route
 _V = TypeVar("_V")  # view
+
 
 # Base classes.
 
@@ -54,15 +53,12 @@ class BaseRoute(Generic[_V]):
     """
 
     def __init__(self, pattern: str, view: _V):
-        if pattern != WILDCARD and not pattern.startswith("/"):
-            pattern = f"/{pattern}"
-        self._pattern = pattern
-        self._parser = Parser(self._pattern)
+        self._parser = Parser(pattern)
         self.view = view
 
     @property
     def pattern(self) -> str:
-        return self._pattern
+        return self._parser.pattern
 
     def url(self, **kwargs) -> str:
         """Return the full URL path for the given route parameters.
@@ -75,7 +71,7 @@ class BaseRoute(Generic[_V]):
             A full URL path obtained by formatting the route pattern with
             the provided route parameters.
         """
-        return self._pattern.format(**kwargs)
+        return self.pattern.format(**kwargs)
 
     def parse(self, path: str) -> Optional[dict]:
         """Parse an URL path against the route's URL pattern.
@@ -85,8 +81,7 @@ class BaseRoute(Generic[_V]):
             If the URL path matches the URL pattern, this is a dictionary
             containing the route parameters, otherwise it is `None`.
         """
-        result = self._parser.parse(path)
-        return result.named if result is not None else None
+        return self._parser.parse(path)
 
 
 class RouteMatch(Generic[_R]):  # pylint: disable=unsubscriptable-object
