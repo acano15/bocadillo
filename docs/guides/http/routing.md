@@ -141,6 +141,35 @@ As you can see, the value of an anonymous parameter is not passed to the view. I
 
 :::
 
+## Query parameters
+
+Similarly to route parameters, query parameters present in the URL's [querystring](https://en.wikipedia.org/wiki/Query_string) can be injected in the view. You can do so by declaring a parameter with a default value:
+
+```python
+items = list(range(10))
+
+@app.route("/items")
+async def get_items(req, res, limit: int = None):
+    if limit is not None:
+        items = items[:limit]
+    res.media = items
+```
+
+Here's what `limit` will be for various requested URL paths:
+
+| Requested path   | `limit`           |
+| ---------------- | ----------------- |
+| `/items`         | `None`            |
+| `/items?limit=5` | `5` (the integer) |
+
+[Validation and conversion features](#validation-and-conversion) available on route parameters are also available for query parameters.
+
+::: tip NOTE
+Query parameters present in the URL but not declared in the view are ignored.
+
+You can still access them through the [Request object](./requests.md#query-parameters).
+:::
+
 ## Route error handling
 
 When Bocadillo cannot find a matching route for the requested URL, a `404 Not Found` error response is returned.
