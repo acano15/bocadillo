@@ -18,10 +18,10 @@
     "default": {
         "aiodine": {
             "hashes": [
-                "sha256:5aa0e6c63f1b7279c02d4619c2e92a72ad3fa8a337d5bacb53f9fc584eca02a1",
-                "sha256:ddf9377dfc8158302d2306b41d651ebfa4dabc4e390052579c9d1d5a4c74e3ea"
+                "sha256:6e13c7d5003389c3f16afb69e88e54c04d6482f69a1ab36296afe89789936ef3",
+                "sha256:9c1ff5d56358cf7b33409fa9d752b4589e508ac19bb3be72876a840d41835293"
             ],
-            "version": "==1.2.3"
+            "version": "==1.2.4"
         },
         "aiofiles": {
             "hashes": [

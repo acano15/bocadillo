@@ -20,21 +20,18 @@ def setup_websocket(app, annotation):
         await ws.send_json({"value": value})
 
 
-def get_http_json(client, url) -> dict:
-    r = client.get(url)
+def get_http_json(client, url, **kwargs) -> dict:
+    r = client.get(url, **kwargs)
     assert r.status_code == 200
     return r.json()
 
 
-def get_websocket_json(client, url) -> dict:
-    with client.websocket_connect(url) as ws:
+def get_websocket_json(client, url, **kwargs) -> dict:
+    with client.websocket_connect(url, **kwargs) as ws:
         return ws.receive_json()
 
 
-@pytest.mark.parametrize(
-    "setup, get_json",
-    [(setup_http, get_http_json), (setup_websocket, get_websocket_json)],
-)
+@pytest.mark.parametrize("setup, get_json", [(setup_http, get_http_json)])
 @pytest.mark.parametrize(
     "annotation, string_value, converted_value",
     [
@@ -133,3 +130,39 @@ def test_defaults_to_str(app, client):
 
     r = client.get("/12")
     assert r.json() == {"number": "12"}
+
+
+def setup_http_query_params_route(app):
+    @app.route("/")
+    async def index(req, res, number: int = 1, q: str = None):
+        res.media = {"number": number, "q": q}
+
+
+def setup_websocket_query_params_route(app):
+    @app.websocket_route("/")
+    async def index(ws, number: int = 1, q: str = None):
+        await ws.send_json({"number": number, "q": q})
+
+
+@pytest.mark.parametrize(
+    "setup, get_json",
+    [
+        (setup_http_query_params_route, get_http_json),
+        (setup_websocket_query_params_route, get_websocket_json),
+    ],
+)
+@pytest.mark.parametrize(
+    "params, result",
+    [
+        ({}, {"number": 1, "q": None}),
+        ({"number": 42}, {"number": 42, "q": None}),
+        ({"q": "test"}, {"number": 1, "q": "test"}),
+    ],
+)
+def test_querystring_converter(app, client, setup, get_json, params, result):
+    setup(app)
+    querystring = "?" + "&".join(
+        f"{key}={value}" for key, value in params.items()
+    )
+    json = get_json(client, f"/{querystring}")
+    assert json == result

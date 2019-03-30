@@ -19,24 +19,26 @@ FIELD_ALIASES: Dict[Type, typesystem.Field] = {
 }
 
 
-def convert_arguments(func: Callable) -> Callable:
-    sig = inspect.signature(func)
+class Converter:
+    def __init__(self, func: Callable):
+        self.func = func
+        self.signature = inspect.signature(self.func)
 
-    annotations: Dict[str, Type] = {
-        param.name: param.annotation
-        for param in sig.parameters.values()
-        if param.annotation is not inspect.Parameter.empty
-    }
+        self.annotations: Dict[str, Type] = {
+            param.name: param.annotation
+            for param in self.signature.parameters.values()
+            if param.annotation is not inspect.Parameter.empty
+        }
 
-    def _convert(args: tuple, kwargs: dict) -> Tuple[tuple, dict]:
-        bound: inspect.BoundArguments = sig.bind(*args, **kwargs)
+    def convert(self, args: tuple, kwargs: dict) -> Tuple[tuple, dict]:
+        bound: inspect.BoundArguments = self.signature.bind(*args, **kwargs)
         bound.apply_defaults()
 
         errors: List[typesystem.ValidationError] = []
 
         for key, value in bound.arguments.items():
             try:
-                annotation = annotations[key]
+                annotation = self.annotations[key]
             except KeyError:
                 continue
 
@@ -65,19 +67,39 @@ def convert_arguments(func: Callable) -> Callable:
 
         return bound.args, bound.kwargs
 
-    if inspect.iscoroutinefunction(func):
 
-        @wraps(func)
-        async def converted(*args, **kwargs):
-            args, kwargs = _convert(args, kwargs)
-            return await func(*args, **kwargs)
+class ViewConverter(Converter):
+    def __init__(self, func):
+        super().__init__(func)
 
-    else:
+        self.query_parameters = {
+            param.name: param.default
+            for param in self.signature.parameters.values()
+            if param.default is not inspect.Parameter.empty
+        }
 
-        @wraps(func)
-        def converted(*args, **kwargs):
-            args, kwargs = _convert(args, kwargs)
-            return func(*args, **kwargs)
+    def get_query_params(self, args, kwargs):
+        raise NotImplementedError
+
+    def convert(self, args, kwargs):
+        query_params = self.get_query_params(args, kwargs)
+
+        for name, default in self.query_parameters.items():
+            kwargs[name] = query_params.get(name, default)
+
+        return super().convert(args, kwargs)
+
+
+def convert_arguments(func: Callable, converter_class=None) -> Callable:
+    if converter_class is None:
+        converter_class = Converter
+
+    converter = converter_class(func)
+
+    @wraps(func)
+    async def converted(*args, **kwargs):
+        args, kwargs = converter.convert(args, kwargs)
+        return await func(*args, **kwargs)
 
     return converted
 

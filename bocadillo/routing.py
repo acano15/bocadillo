@@ -8,9 +8,7 @@
 [generic types]: https://docs.python.org/3/library/typing.html#generics
 """
 
-import sys
 import inspect
-import traceback
 from typing import (
     Any,
     Callable,
@@ -22,16 +20,12 @@ from typing import (
     TypeVar,
 )
 
-import typesystem
 from parse import Parser
 from starlette.websockets import WebSocketClose
 
 from . import views
 from .app_types import HTTPApp, Receive, Scope, Send
-from .compat import asyncnullcontext
-from .converters import convert_arguments
 from .errors import HTTPError
-from .injection import consumer
 from .redirection import Redirection
 from .request import Request
 from .response import Response
@@ -328,21 +322,7 @@ class WebSocketRoute(BaseRoute[WebSocketView]):
         self, scope: Scope, receive: Receive, send: Send, **params
     ):
         ws = WebSocket(scope, receive=receive, send=send, **self._ws_kwargs)
-
-        context = ws if ws.auto_accept else asyncnullcontext()
-        try:
-            async with context:
-                try:
-                    await self.view(ws, **params)  # type: ignore
-                except typesystem.ValidationError:
-                    await ws.ensure_closed(403)
-                    # See: https://github.com/encode/typesystem/issues/64
-                    if sys.version_info >= (3, 7):
-                        traceback.print_exc()
-        except BaseException:
-            traceback.print_exc()  # useful for client-side debugging
-            await ws.ensure_closed(1011)
-            raise
+        await self.view(ws, **params)
 
 
 class WebSocketRouter(BaseRouter[WebSocketRoute, WebSocketView]):
@@ -354,11 +334,9 @@ class WebSocketRouter(BaseRouter[WebSocketRoute, WebSocketView]):
     def _get_key(self, route: WebSocketRoute) -> str:
         return route.pattern
 
-    def normalize(self, view: WebSocketView) -> WebSocketView:
+    def normalize(self, view: Any) -> WebSocketView:
         view = super().normalize(view)
-        view = convert_arguments(view)
-        view = consumer(view)
-        return view
+        return WebSocketView(view)
 
     def add_route(
         self, view: WebSocketView, pattern: str, **kwargs

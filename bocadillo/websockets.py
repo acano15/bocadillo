@@ -1,11 +1,17 @@
-from typing import Any, Awaitable, Callable, Optional, Tuple, Union
+import sys
+import traceback
+from typing import Any, Callable, Tuple, Union
 
+import typesystem
 from starlette.datastructures import URL, Headers, QueryParams
 from starlette.websockets import WebSocket as StarletteWebSocket
 from starlette.websockets import WebSocketDisconnect as _WebSocketDisconnect
 
 from .app_types import Event, Receive, Scope, Send
+from .compat import asyncnullcontext
 from .constants import WEBSOCKET_CLOSE_CODES
+from .converters import ViewConverter, convert_arguments
+from .injection import consumer
 
 
 class WebSocket:
@@ -215,5 +221,33 @@ class WebSocket:
             yield await self.receive()
 
 
-WebSocketView = Callable[[WebSocket], Awaitable[None]]
+class WebSocketConverter(ViewConverter):
+    def get_query_params(self, args: tuple, kwargs: dict) -> dict:
+        ws: WebSocket = args[0]
+        return ws.query_params
+
+
+class WebSocketView:
+    def __init__(self, func: Callable):
+        func = convert_arguments(func, converter_class=WebSocketConverter)
+        func = consumer(func)
+        self.func = func
+
+    async def __call__(self, ws: WebSocket, **params):
+        context = ws if ws.auto_accept else asyncnullcontext()
+        try:
+            async with context:
+                try:
+                    await self.func(ws, **params)  # type: ignore
+                except typesystem.ValidationError:
+                    await ws.ensure_closed(403)
+                    # See: https://github.com/encode/typesystem/issues/64
+                    if sys.version_info >= (3, 7):
+                        traceback.print_exc()
+        except BaseException:
+            traceback.print_exc()  # useful for client-side debugging
+            await ws.ensure_closed(1011)
+            raise
+
+
 WebSocketDisconnect = _WebSocketDisconnect
