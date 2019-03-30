@@ -20,6 +20,9 @@ FIELD_ALIASES: Dict[Type, typesystem.Field] = {
 
 
 class Converter:
+
+    __slots__ = ("func", "signature", "annotations", "required_params")
+
     def __init__(self, func: Callable):
         self.func = func
         self.signature = inspect.signature(self.func)
@@ -76,6 +79,9 @@ class Converter:
 
 
 class ViewConverter(Converter):
+
+    __slots__ = ("query_parameters",)
+
     def __init__(self, func):
         super().__init__(func)
 

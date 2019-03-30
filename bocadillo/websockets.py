@@ -237,6 +237,9 @@ class WebSocketConverter(ViewConverter):
 
 
 class WebSocketView:
+
+    __slots__ = ("func",)
+
     def __init__(self, func: Callable):
         func = convert_arguments(func, converter_class=WebSocketConverter)
         func = consumer(func)
