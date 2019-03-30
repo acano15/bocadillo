@@ -26,9 +26,9 @@ from . import views
 from .app_types import HTTPApp, Receive, Scope, Send
 from .errors import HTTPError
 from .redirection import Redirection
-from .urlparse import Parser
 from .request import Request
 from .response import Response
+from .urlparse import Parser
 from .views import AsyncHandler, HandlerDoesNotExist, View
 from .websockets import WebSocket, WebSocketView
 
