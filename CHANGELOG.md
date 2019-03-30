@@ -22,6 +22,10 @@ As a result, we strongly recommend you read this document carefully before upgra
 
 [typesystem]: https://www.encode.io/typesystem
 
+### Fixed
+
+- The code base now uses `__slots__` in all relevant places. We expect some speed improvements as a result.
+
 ### Removed
 
 - **BREAKING**: route parameter validation via specifiers (e.g. `{id:d}`) is not supported anymore. Please use type annotation-based validation instead (e.g. `pk: int`).
