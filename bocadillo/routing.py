@@ -17,6 +17,7 @@ from typing import (
     NoReturn,
     Optional,
     Tuple,
+    Type,
     TypeVar,
 )
 
@@ -25,6 +26,7 @@ from starlette.websockets import WebSocketClose
 from . import views
 from .app_types import HTTPApp, Receive, Scope, Send
 from .errors import HTTPError
+from .injection import consumer
 from .redirection import Redirection
 from .request import Request
 from .response import Response
@@ -35,6 +37,22 @@ from .websockets import WebSocket, WebSocketView
 # Route generic types.
 _R = TypeVar("_R", bound="BaseRoute")  # route
 _V = TypeVar("_V")  # view
+
+
+# Utilities.
+
+
+class RouteMatch(Generic[_R]):  # pylint: disable=unsubscriptable-object
+    """Represents a match between an URL path and a route.
+
+    # Parameters
+    route: a route object (subclass of #::bocadillo.routing#BaseRoute).
+    params (dict): extracted route parameters.
+    """
+
+    def __init__(self, route: _R, params: dict):
+        self.route = route
+        self.params = params
 
 
 # Base classes.
@@ -83,18 +101,24 @@ class BaseRoute(Generic[_V]):
         """
         return self._parser.parse(path)
 
+    @classmethod
+    def normalize(cls, view: Any) -> _V:
+        """Perform any conversion necessary to return a proper view object.
 
-class RouteMatch(Generic[_R]):  # pylint: disable=unsubscriptable-object
-    """Represents a match between an URL path and a route.
+        Not implemented.
+        """
+        raise NotImplementedError
 
-    # Parameters
-    route: a route object (subclass of #::bocadillo.routing#BaseRoute).
-    params (dict): extracted route parameters.
-    """
+    @classmethod
+    def build(cls, view: _V, pattern: str, **kwargs) -> _R:
+        """Create a route out of a normalized view."""
+        return cls(view=view, pattern=pattern, **kwargs)
 
-    def __init__(self, route: _R, params: dict):
-        self.route = route
-        self.params = params
+    @classmethod
+    def create(cls, view: Any, pattern: str, **kwargs) -> _R:
+        """Normalize a view and build and a route instance."""
+        view: _V = cls.normalize(view)
+        return cls.build(view, pattern=pattern, **kwargs)
 
 
 class BaseRouter(Generic[_R, _V]):
@@ -105,6 +129,8 @@ class BaseRouter(Generic[_R, _V]):
         a mapping of URL patterns to route objects.
     """
 
+    route_class: Type[_R]
+
     def __init__(self):
         self.routes: Dict[str, _R] = {}
 
@@ -112,18 +138,8 @@ class BaseRouter(Generic[_R, _V]):
         # Return the key at which `route` should be stored internally.
         raise NotImplementedError
 
-    def normalize(self, view: Any) -> _V:
-        """Perform any conversion necessary to return a proper view object.
-
-        This is a no-op by default, i.e. it returns what it's given.
-        """
-        return view
-
-    def add_route(self, view: _V, pattern: str, **kwargs) -> _R:
-        """Register a route (to be implemented by concrete routers)."""
-        raise NotImplementedError
-
-    def add(self, route: _R) -> None:
+    def add_route(self, route: _R) -> None:
+        """Register a route."""
         self.routes[self._get_key(route)] = route
 
     def route(self, *args, **kwargs) -> Callable[[Any], _R]:
@@ -140,8 +156,8 @@ class BaseRouter(Generic[_R, _V]):
         """
 
         def decorate(view: Any) -> _R:
-            normalized_view: _V = self.normalize(view)
-            return self.add_route(normalized_view, *args, **kwargs)
+            route = self.route_class.create(view, *args, **kwargs)
+            self.add_route(route)
 
         return decorate
 
@@ -184,31 +200,8 @@ class HTTPRoute(BaseRoute[View]):
         super().__init__(pattern, view)
         self.name = name
 
-    async def __call__(self, req: Request, res: Response, **params):
-        method: str = req.method.lower()
-
-        try:
-            handler: AsyncHandler = self.view.get_handler(method)
-        except HandlerDoesNotExist as e:
-            raise HTTPError(405) from e
-
-        await handler(req, res, **params)  # type: ignore
-
-
-class HTTPRouter(HTTPApp, BaseRouter[HTTPRoute, View]):
-    """A router for HTTP routes.
-
-    Subclass of #::bocadillo.routing#BaseRouter.
-
-    Note: routes are stored by `name` instead of `pattern`.
-    """
-
-    def _get_key(self, route: HTTPRoute) -> str:
-        # NOTE: this ensures that no two routes stored in this
-        # router have the same name.
-        return route.name
-
-    def normalize(self, view: Any) -> View:
+    @classmethod
+    def normalize(cls, view: Any) -> View:
         """Build a #::bocadillo.views#View object.
 
         The input, free-form `view` object is converted using the following
@@ -228,8 +221,6 @@ class HTTPRouter(HTTPApp, BaseRouter[HTTPRoute, View]):
             a #::bocadillo.views#View object,
             ready to be fed to [`.add_route()`](#add-route).
         """
-        view = super().normalize(view)
-
         if isinstance(view, View):
             return view
 
@@ -246,37 +237,60 @@ class HTTPRouter(HTTPApp, BaseRouter[HTTPRoute, View]):
         # Treat as a view-like object.
         return views.from_obj(view)
 
-    def add_route(
-        self,
+    @classmethod
+    def build(
+        cls,
         view: View,
         pattern: str,
         name: str = None,
         namespace: str = None,
         **kwargs,
-    ) -> HTTPRoute:
-        """Register an HTTP route.
+    ) -> "HTTPRoute":
+        """Build an HTTP route.
 
         # Parameters
         view:
-            a #::bocadillo.views#View object.
-            You may use [.normalize()](#normalize-2) to get one from a
-            function or class-based view before-hand.
+            a #::bocadillo.views#View object
+            obtained via [.normalize()](#normalize-2).
         pattern (str): an URL pattern.
         name (str): a route name (inferred from the view if not given).
         namespace (str): an optional route namespace.
 
         # Returns
-        route: the registered #::bocadillo.routing#HTTPRoute.
+        route: an instance of #::bocadillo.routing#HTTPRoute.
         """
         if name is None:
             name = view.name
         if namespace is not None:
             name = namespace + ":" + name
 
-        route = HTTPRoute(pattern=pattern, view=view, name=name)
-        self.add(route)
+        return super().build(view=view, pattern=pattern, name=name)
 
-        return route
+    async def __call__(self, req: Request, res: Response, **params):
+        method: str = req.method.lower()
+
+        try:
+            handler: AsyncHandler = self.view.get_handler(method)
+        except HandlerDoesNotExist as e:
+            raise HTTPError(405) from e
+
+        await handler(req, res, **params)  # type: ignore
+
+
+class HTTPRouter(HTTPApp, BaseRouter[HTTPRoute, View]):
+    """A router for HTTP routes.
+
+    Subclass of #::bocadillo.routing#BaseRouter.
+
+    Note: routes are stored by `name` instead of `pattern`.
+    """
+
+    route_class = HTTPRoute
+
+    def _get_key(self, route: HTTPRoute) -> str:
+        # NOTE: this ensures that no two routes stored in this
+        # router have the same name.
+        return route.name
 
     async def __call__(self, req: Request, res: Response) -> Response:
         match = self.match(req.url.path)
@@ -313,6 +327,10 @@ class WebSocketRoute(BaseRoute[WebSocketView]):
         super().__init__(pattern, view)
         self._ws_kwargs = kwargs
 
+    @classmethod
+    def normalize(cls, view: Any) -> WebSocketView:
+        return WebSocketView(view)
+
     async def __call__(
         self, scope: Scope, receive: Receive, send: Send, **params
     ):
@@ -326,28 +344,10 @@ class WebSocketRouter(BaseRouter[WebSocketRoute, WebSocketView]):
     Subclass of #::bocadillo.routing#BaseRouter.
     """
 
+    route_class = WebSocketRoute
+
     def _get_key(self, route: WebSocketRoute) -> str:
         return route.pattern
-
-    def normalize(self, view: Any) -> WebSocketView:
-        view = super().normalize(view)
-        return WebSocketView(view)
-
-    def add_route(
-        self, view: WebSocketView, pattern: str, **kwargs
-    ) -> WebSocketRoute:
-        """Register a WebSocket route.
-
-        # Parameters
-        pattern (str): an URL pattern.
-        view (coroutine function): a WebSocket view.
-
-        # Returns
-        route: the registered #::bocadillo.routing#WebSocketRoute.
-        """
-        route = WebSocketRoute(pattern=pattern, view=view, **kwargs)
-        self.add(route)
-        return route
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send):
         # Dispatch a WebSocket connection request.
