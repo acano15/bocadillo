@@ -132,16 +132,16 @@ def test_defaults_to_str(app, client):
     assert r.json() == {"number": "12"}
 
 
-def setup_http_query_params_route(app):
+def setup_http_query_params_route(app, annotation, default):
     @app.route("/")
-    async def index(req, res, number: int = 1, q: str = None):
-        res.media = {"number": number, "q": q}
+    async def index(req, res, value: annotation = default):
+        res.media = {"value": value}
 
 
-def setup_websocket_query_params_route(app):
+def setup_websocket_query_params_route(app, annotation, default):
     @app.websocket_route("/")
-    async def index(ws, number: int = 1, q: str = None):
-        await ws.send_json({"number": number, "q": q})
+    async def index(ws, value: annotation = default):
+        await ws.send_json({"value": value})
 
 
 @pytest.mark.parametrize(
@@ -152,15 +152,19 @@ def setup_websocket_query_params_route(app):
     ],
 )
 @pytest.mark.parametrize(
-    "params, result",
+    "annotation, default, params, result",
     [
-        ({}, {"number": 1, "q": None}),
-        ({"number": 42}, {"number": 42, "q": None}),
-        ({"q": "test"}, {"number": 1, "q": "test"}),
+        (int, None, {}, {"value": None}),
+        (int, None, {"value": 42}, {"value": 42}),
+        (int, 42, {}, {"value": 42}),
+        (typesystem.Number(minimum=0), None, {}, {"value": None}),
+        (typesystem.Number(minimum=0), 42, {}, {"value": 42}),
     ],
 )
-def test_querystring_converter(app, client, setup, get_json, params, result):
-    setup(app)
+def test_querystring_converter(
+    app, client, setup, get_json, annotation, default, params, result
+):
+    setup(app, annotation, default)
     querystring = "?" + "&".join(
         f"{key}={value}" for key, value in params.items()
     )

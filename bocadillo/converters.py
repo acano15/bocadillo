@@ -9,13 +9,13 @@ import typesystem
 from .errors import HTTPError
 
 FIELD_ALIASES: Dict[Type, typesystem.Field] = {
-    int: typesystem.Integer(),
-    float: typesystem.Float(),
-    bool: typesystem.Boolean(),
-    decimal.Decimal: typesystem.Decimal(),
-    date: typesystem.Date(),
-    time: typesystem.Time(),
-    datetime: typesystem.DateTime(),
+    int: typesystem.Integer,
+    float: typesystem.Float,
+    bool: typesystem.Boolean,
+    decimal.Decimal: typesystem.Decimal,
+    date: typesystem.Date,
+    time: typesystem.Time,
+    datetime: typesystem.DateTime,
 }
 
 
@@ -29,41 +29,48 @@ class Converter:
             for param in self.signature.parameters.values()
             if param.annotation is not inspect.Parameter.empty
         }
+        self.required_params = set(
+            param.name
+            for param in self.signature.parameters.values()
+            if param.default is inspect.Parameter.empty
+        )
 
     def convert(self, args: tuple, kwargs: dict) -> Tuple[tuple, dict]:
         bound: inspect.BoundArguments = self.signature.bind(*args, **kwargs)
-        bound.apply_defaults()
 
         errors: List[typesystem.ValidationError] = []
 
-        for key, value in bound.arguments.items():
+        for param_name, value in bound.arguments.items():
             try:
-                annotation = self.annotations[key]
+                annotation = self.annotations[param_name]
             except KeyError:
                 continue
 
-            field: typesystem.Field
+            # Find the TypeSystem field for the parameter's annotation.
             if isinstance(annotation, typesystem.Field):
                 field = annotation
             else:
-                field = FIELD_ALIASES.get(annotation)
-                if field is None:
+                try:
+                    field = FIELD_ALIASES[annotation]()
+                except KeyError:
                     continue
 
-            # NOTE: don't use `field.validate()` directly. Use an `Object`
-            # so that error messages contain the name of the field
-            # as passed to `.validate()` below.
-            validator = typesystem.Object(properties=field)
-
+            # Perform validation.
             try:
-                validated = validator.validate({key: value})
+                value = field.validate(value)
             except typesystem.ValidationError as exc:
-                errors.extend(exc.messages())
+                # NOTE: `add_prefix` sets the key of the error in the final
+                # error's dict representation.
+                errors.extend(exc.messages(add_prefix=param_name))
             else:
-                bound.arguments[key] = validated[key]
+                bound.arguments[param_name] = value
 
         if errors:
             raise typesystem.ValidationError(messages=errors)
+
+        # NOTE: apply defaults last to prevent validating the default values.
+        # It's faster and less bug-prone.
+        bound.apply_defaults()
 
         return bound.args, bound.kwargs
 
@@ -72,20 +79,21 @@ class ViewConverter(Converter):
     def __init__(self, func):
         super().__init__(func)
 
-        self.query_parameters = {
-            param.name: param.default
+        self.query_parameters = set(
+            param.name
             for param in self.signature.parameters.values()
             if param.default is not inspect.Parameter.empty
-        }
+        )
 
-    def get_query_params(self, args, kwargs):
+    def get_query_params(self, args: tuple, kwargs: dict) -> dict:
         raise NotImplementedError
 
-    def convert(self, args, kwargs):
+    def convert(self, args: tuple, kwargs: dict) -> Tuple[tuple, dict]:
         query_params = self.get_query_params(args, kwargs)
 
-        for name, default in self.query_parameters.items():
-            kwargs[name] = query_params.get(name, default)
+        for param_name in self.query_parameters:
+            if param_name in query_params:
+                kwargs[param_name] = query_params[param_name]
 
         return super().convert(args, kwargs)
 
